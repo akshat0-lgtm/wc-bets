@@ -66,7 +66,7 @@ if st.session_state.who is None:
                 st.error(f"Couldn't load the Splitwise group: {e}")
                 st.stop()
             names = [m["name"] for m in members]
-            pick = st.selectbox("Who are you?", ["— select —"] + names)
+            pick = st.radio("Who are you?", ["— select —"] + names)
             if pick != "— select —":
                 m = next(x for x in members if x["name"] == pick)
                 if st.button("Enter", type="primary", use_container_width=True):
@@ -106,8 +106,7 @@ with tab_objs[0]:
             st.caption(f"Kickoff {ist(kick(g))} · "
                        + ("🟢 betting open" if is_open else "🔒 betting closed"))
 
-            for market, options in (("result", ["home", "draw", "away"]),
-                                    ("ou25", ["over", "under"])):
+            for market, options in (("result", ["home", "draw", "away"]),):
                 st.markdown("**Match result**" if market == "result"
                             else "**Total goals (line: 2.5)**")
                 pools, total = pool_summary(bets, market, options)
