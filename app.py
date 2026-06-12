@@ -65,11 +65,10 @@ if st.session_state.who is None:
             except Exception as e:
                 st.error(f"Couldn't load the Splitwise group: {e}")
                 st.stop()
-            names = [m["name"] for m in members]
-            pick = st.radio("Who are you?", ["— select —"] + names)
-            if pick != "— select —":
-                m = next(x for x in members if x["name"] == pick)
-                if st.button("Enter", type="primary", use_container_width=True):
+            st.write("Who are you?")
+            cols = st.columns(2)
+            for i, m in enumerate(members):
+                if cols[i % 2].button(m["name"], key=f"who-{m['id']}", use_container_width=True):
                     st.session_state.who = m
                     st.session_state.admin = (code == st.secrets["ADMIN_CODE"])
                     st.rerun()
