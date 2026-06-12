@@ -65,3 +65,16 @@ def record_settlement(night_label, game_ids, nets, expense_id):
 
 def list_settlements():
     return client().table("settlements").select("*").order("created_at", desc=True).execute().data
+
+
+# ---------- per-user passwords ----------
+
+def get_auth(sw_user_id: int):
+    rows = client().table("user_auth").select("*")\
+        .eq("splitwise_user_id", sw_user_id).execute().data
+    return rows[0] if rows else None
+
+def set_auth(sw_user_id, user_name, salt, pw_hash):
+    client().table("user_auth").upsert(
+        {"splitwise_user_id": sw_user_id, "user_name": user_name,
+         "salt": salt, "pw_hash": pw_hash}).execute()
