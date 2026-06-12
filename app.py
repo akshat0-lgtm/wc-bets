@@ -167,7 +167,7 @@ with tab_objs[0]:
                 st.markdown("**Match result**" if market == "result"
                             else "**Total goals (line: 2.5)**")
                 pools, total = pool_summary(bets, market, options)
-               cols = st.columns(len(options))
+                cols = st.columns(len(options))
                 for c, o in zip(cols, options):
                     side, pct = pools[o]
                     if is_open:
