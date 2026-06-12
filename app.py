@@ -188,7 +188,7 @@ with tab_objs[0]:
                                             format_func=lambda o, g=g: label(g, o),
                                             index=options.index(mine["pick"]) if mine else 0,
                                             key=f"p-{g['id']}-{market}")
-                        amt = c2.number_input("₹", min_value=1, max_value=MAX_BET,
+                        amt = c2.number_input("₹", min_value=50, max_value=MAX_BET,
                                               value=int(float(mine["amount"])) if mine else 100,
                                               key=f"a-{g['id']}-{market}")
                         placed = c3.form_submit_button(
