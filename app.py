@@ -171,9 +171,14 @@ with tab_objs[0]:
                 for c, o in zip(cols, options):
                     side, pct = pools[o]
                     refv = ref.get(o)
-                    c.metric(label(g, o),
-                             f"{refv}x" if refv else "—",
-                             f"pool ₹{side:.0f} · {pct:.0f}%", delta_color="off")
+                    if is_open:
+                        c.metric(label(g, o),
+                                 f"{refv}x" if refv else "—",
+                                 "pool hidden until close", delta_color="off")
+                    else:
+                        c.metric(label(g, o),
+                                 f"{refv}x" if refv else "—",
+                                 f"pool ₹{side:.0f} · {pct:.0f}%", delta_color="off")
                 st.caption(f"Boxes show **reference odds** (bookmaker line) — your real "
                            f"payout is pari-mutuel on the final pool (₹{total:.0f} so far) "
                            f"and is fixed only when betting closes.")
