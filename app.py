@@ -118,9 +118,8 @@ with tab_objs[0]:
                     c.metric(label(g, o),
                              f"{refv}x" if refv else "—",
                              f"pool ₹{side:.0f} · {pct:.0f}%", delta_color="off")
-                st.caption(f"Boxes show **reference odds** (bookmaker line) — your real "
-                           f"payout is pari-mutuel on the final pool (₹{total:.0f} so far) "
-                           f"and is fixed only when betting closes.")
+                st.caption("These are **REFERENCE ODDS**, real payout odds "
+                           "will be decided post all bets are placed")
 
                 if is_open:
                     mine = next((b for b in bets if b["splitwise_user_id"] == who["id"]
