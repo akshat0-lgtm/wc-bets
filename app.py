@@ -375,6 +375,22 @@ if st.session_state.admin:
                         st.success("Result saved.")
                         st.rerun()
 
+        st.markdown("### Reset a user's password")
+        auths = db.list_auth()
+        if not auths:
+            st.caption("No passwords set yet.")
+        else:
+            opts = {f"{a['user_name']}": a["splitwise_user_id"] for a in auths}
+            choice = st.selectbox("Whose password to clear?",
+                                  ["— select —"] + list(opts.keys()), key="pwreset")
+            if choice != "— select —":
+                st.warning(f"This clears **{choice}**'s password. They'll set a new one "
+                           "next time they log in (first to set it owns it again).")
+                if st.button("Delete this password", key="delpw"):
+                    db.delete_auth(opts[choice])
+                    st.success(f"Password cleared for {choice}.")
+                    st.rerun()
+
         st.markdown("### Settle the night → Splitwise")
         ready = db.list_games(statuses=["result_in"])
         if not ready:
