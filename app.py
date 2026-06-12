@@ -49,6 +49,50 @@ def label(g, o):
             "over": "Over 2.5", "under": "Under 2.5"}[o]
 
 
+
+def project_payouts(bets, market, options):
+    """Per-person upside once the pool is locked. Each person bet one side;
+    returns their payout IF their pick wins (else they lose their stake)."""
+    rows = [b for b in bets if b["market"] == market]
+    pool = sum(float(b["amount"]) for b in rows)
+    by_side = {o: sum(float(b["amount"]) for b in rows if b["pick"] == o) for o in options}
+    out = []
+    for b in rows:
+        a = float(b["amount"])
+        side = by_side[b["pick"]]
+        payout = (a / side * pool) if side else 0.0
+        out.append({"uid": b["splitwise_user_id"], "name": b["user_name"],
+                    "pick": b["pick"], "stake": a,
+                    "win_payout": payout, "win_net": payout - a})
+    return out, pool
+
+
+def projection_text(g, rows, pool):
+    lines = [f"🔒 Pool locked — {g['home']} vs {g['away']}",
+             f"Total pool: ₹{pool:.0f}", "",
+             "If your pick wins:"]
+    for r in sorted(rows, key=lambda r: -r["win_payout"]):
+        lines.append(f"{r['name']}: ₹{r['stake']:.0f} on {label(g, r['pick'])} "
+                     f"→ +₹{r['win_net']:.0f} (gets ₹{r['win_payout']:.0f} back)")
+    return "\n".join(lines)
+
+
+def send_email(subject, body):
+    if "SMTP_USER" not in st.secrets:
+        return False, "SMTP not configured"
+    try:
+        msg = MIMEText(body)
+        msg["Subject"] = subject
+        msg["From"] = st.secrets["SMTP_USER"]
+        msg["To"] = st.secrets.get("SUMMARY_EMAIL_TO", st.secrets["SMTP_USER"])
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as s:
+            s.login(st.secrets["SMTP_USER"], st.secrets["SMTP_PASSWORD"])
+            s.send_message(msg)
+        return True, "sent"
+    except Exception as e:
+        return False, str(e)
+
+
 # ---------------- auth ----------------
 
 def _hash_pw(password, salt=None):
@@ -283,6 +327,29 @@ if st.session_state.admin:
                         db.set_ref_odds(g["id"], {k: round(v, 2) for k, v in vals.items()})
                         st.success("Saved.")
 
+        st.markdown("### Locked pools — projected payouts")
+        any_locked = False
+        for g in db.list_games(statuses=["upcoming"]):
+            if betting_open(kick(g), close_buffer_min=CLOSE_MIN):
+                continue  # betting still open
+            bets = db.bets_for_game(g["id"])
+            rows, pool = project_payouts(bets, "result", ["home", "draw", "away"])
+            if not rows:
+                continue
+            any_locked = True
+            with st.expander(f"{g['home']} vs {g['away']} — pool ₹{pool:.0f}"):
+                txt = projection_text(g, rows, pool)
+                st.code(txt, language=None)
+                if st.button("📧 Email these projections", key=f"proj-{g['id']}"):
+                    ok, info = send_email(
+                        f"Locked pool — {g['home']} vs {g['away']}", txt)
+                    if ok:
+                        st.success("Emailed ✉️")
+                    else:
+                        st.warning(f"Email failed: {info}")
+        if not any_locked:
+            st.caption("Nothing locked yet — projections appear here once a game's betting closes.")
+
         st.markdown("### Results")
         for g in db.list_games(statuses=["upcoming", "result_in"]):
             if kick(g) > now_utc():
@@ -370,17 +437,8 @@ if st.session_state.admin:
                     st.code(text, language=None)
                     st.caption("Copy the summary above into the WhatsApp group.")
 
-                    if "SMTP_USER" in st.secrets:
-                        try:
-                            msg = MIMEText(text)
-                            msg["Subject"] = night_label
-                            msg["From"] = st.secrets["SMTP_USER"]
-                            msg["To"] = st.secrets.get("SUMMARY_EMAIL_TO",
-                                                       st.secrets["SMTP_USER"])
-                            with smtplib.SMTP_SSL("smtp.gmail.com", 465) as s:
-                                s.login(st.secrets["SMTP_USER"],
-                                        st.secrets["SMTP_PASSWORD"])
-                                s.send_message(msg)
-                            st.success("Summary emailed ✉️")
-                        except Exception as e:
-                            st.warning(f"Email failed (Splitwise already posted fine): {e}")
+                    ok, info = send_email(night_label, text)
+                    if ok:
+                        st.success("Summary emailed ✉️")
+                    elif info != "SMTP not configured":
+                        st.warning(f"Email failed (Splitwise already posted fine): {info}")
