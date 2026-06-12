@@ -3,6 +3,7 @@ User flow: join code -> pick your name (Splitwise group) -> bet on tonight's gam
 Admin flow (separate code): manage games, odds, results, settle night -> Splitwise.
 """
 import smtplib
+import hashlib, hmac, os, binascii
 from email.mime.text import MIMEText
 from datetime import datetime, timezone, timedelta
 from zoneinfo import ZoneInfo
@@ -50,6 +51,18 @@ def label(g, o):
 
 # ---------------- auth ----------------
 
+def _hash_pw(password, salt=None):
+    if salt is None:
+        salt = binascii.hexlify(os.urandom(16)).decode()
+    dk = hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), 100_000)
+    return salt, binascii.hexlify(dk).decode()
+
+def _verify_pw(password, salt, expected):
+    _, h = _hash_pw(password, salt)
+    return hmac.compare_digest(h, expected)
+
+
+
 if "who" not in st.session_state:
     st.session_state.who = None
 if "admin" not in st.session_state:
@@ -58,24 +71,69 @@ if "admin" not in st.session_state:
 if st.session_state.who is None:
     st.title("⚽ World Cup Betting Pool")
     code = st.text_input("League code", type="password")
-    if code:
-        if code == st.secrets["JOIN_CODE"] or code == st.secrets["ADMIN_CODE"]:
-            try:
-                members = sw.group_members()
-            except Exception as e:
-                st.error(f"Couldn't load the Splitwise group: {e}")
-                st.stop()
-            st.write("Who are you?")
-            cols = st.columns(2)
-            for i, m in enumerate(members):
-                if cols[i % 2].button(m["name"], key=f"who-{m['id']}", use_container_width=True):
-                    st.session_state.who = m
-                    st.session_state.admin = (code == st.secrets["ADMIN_CODE"])
-                    st.rerun()
-            st.caption("Name not in the list? You're not in the Splitwise group yet — "
-                       "ping Akshat to add you, then refresh.")
-        else:
-            st.error("Wrong code — not allowed.")
+    if not code:
+        st.stop()
+    if code != st.secrets["JOIN_CODE"] and code != st.secrets["ADMIN_CODE"]:
+        st.error("Wrong code — not allowed.")
+        st.stop()
+    is_admin_code = (code == st.secrets["ADMIN_CODE"])
+
+    try:
+        members = sw.group_members()
+    except Exception as e:
+        st.error(f"Couldn't load the Splitwise group: {e}")
+        st.stop()
+
+    if st.session_state.get("pending") is None:
+        st.write("Who are you?")
+        cols = st.columns(2)
+        for i, m in enumerate(members):
+            if cols[i % 2].button(m["name"], key=f"who-{m['id']}", use_container_width=True):
+                st.session_state.pending = m
+                st.session_state.pending_admin = is_admin_code
+                st.rerun()
+        st.caption("Name not in the list? You're not in the Splitwise group yet — "
+                   "ping Akshat to add you, then refresh.")
+        st.stop()
+
+    m = st.session_state.pending
+    auth = db.get_auth(m["id"])
+    st.write(f"Hi **{m['name']}**")
+
+    if auth is None:
+        st.info("First time — set a password. You'll use it to log in from now on.")
+        p1 = st.text_input("New password", type="password", key="np1")
+        p2 = st.text_input("Confirm password", type="password", key="np2")
+        c1, c2 = st.columns([3, 1])
+        if c1.button("Set password & enter", type="primary", use_container_width=True):
+            if len(p1) < 4:
+                st.error("Use at least 4 characters.")
+            elif p1 != p2:
+                st.error("Passwords don't match.")
+            else:
+                salt, h = _hash_pw(p1)
+                db.set_auth(m["id"], m["name"], salt, h)
+                st.session_state.who = m
+                st.session_state.admin = st.session_state.pending_admin
+                st.session_state.pending = None
+                st.rerun()
+        if c2.button("Back", use_container_width=True):
+            st.session_state.pending = None
+            st.rerun()
+    else:
+        pw = st.text_input("Your password", type="password", key="lp")
+        c1, c2 = st.columns([3, 1])
+        if c1.button("Enter", type="primary", use_container_width=True):
+            if _verify_pw(pw, auth["salt"], auth["pw_hash"]):
+                st.session_state.who = m
+                st.session_state.admin = st.session_state.pending_admin
+                st.session_state.pending = None
+                st.rerun()
+            else:
+                st.error("Wrong password.")
+        if c2.button("Back", use_container_width=True):
+            st.session_state.pending = None
+            st.rerun()
     st.stop()
 
 who = st.session_state.who
@@ -105,7 +163,8 @@ with tab_objs[0]:
             st.caption(f"Kickoff {ist(kick(g))} · "
                        + ("🟢 betting open" if is_open else "🔒 betting closed"))
 
-            for market, options in (("result", ["home", "draw", "away"]),):
+            for market, options in (("result", ["home", "draw", "away"]),
+                                    ("ou25", ["over", "under"])):
                 st.markdown("**Match result**" if market == "result"
                             else "**Total goals (line: 2.5)**")
                 pools, total = pool_summary(bets, market, options)
@@ -116,8 +175,9 @@ with tab_objs[0]:
                     c.metric(label(g, o),
                              f"{refv}x" if refv else "—",
                              f"pool ₹{side:.0f} · {pct:.0f}%", delta_color="off")
-                st.caption("These are **REFERENCE ODDS**, real payout odds "
-                           "will be decided post all bets are placed")
+                st.caption(f"Boxes show **reference odds** (bookmaker line) — your real "
+                           f"payout is pari-mutuel on the final pool (₹{total:.0f} so far) "
+                           f"and is fixed only when betting closes.")
 
                 if is_open:
                     mine = next((b for b in bets if b["splitwise_user_id"] == who["id"]
