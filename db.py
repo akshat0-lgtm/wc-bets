@@ -78,3 +78,11 @@ def set_auth(sw_user_id, user_name, salt, pw_hash):
     client().table("user_auth").upsert(
         {"splitwise_user_id": sw_user_id, "user_name": user_name,
          "salt": salt, "pw_hash": pw_hash}).execute()
+
+
+def list_auth():
+    return client().table("user_auth").select(
+        "splitwise_user_id, user_name").order("user_name").execute().data
+
+def delete_auth(sw_user_id):
+    client().table("user_auth").delete().eq("splitwise_user_id", sw_user_id).execute()
