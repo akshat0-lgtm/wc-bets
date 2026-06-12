@@ -163,8 +163,7 @@ with tab_objs[0]:
             st.caption(f"Kickoff {ist(kick(g))} · "
                        + ("🟢 betting open" if is_open else "🔒 betting closed"))
 
-            for market, options in (("result", ["home", "draw", "away"]),
-                                    ("ou25", ["over", "under"])):
+            for market, options in (("result", ["home", "draw", "away"]),):
                 st.markdown("**Match result**" if market == "result"
                             else "**Total goals (line: 2.5)**")
                 pools, total = pool_summary(bets, market, options)
