@@ -285,7 +285,6 @@ with tab_objs[0]:
                                                  use_container_width=True,
                                                  type="primary" if sel else "secondary"):
                                 st.session_state[pick_key] = o
-                                st.rerun()
                         pick = st.session_state[pick_key]
                         amt_key = f"amt-{skey}"
                         st.session_state.setdefault(
@@ -296,7 +295,6 @@ with tab_objs[0]:
                             if v <= MAX_BET and chips[ci].button(
                                     f"₹{v}", key=f"chip-{skey}-{v}", use_container_width=True):
                                 st.session_state[amt_key] = v
-                                st.rerun()
                         amt = st.number_input("Amount ₹", min_value=50, max_value=MAX_BET,
                                               step=50, key=amt_key, label_visibility="collapsed")
                         if st.button("Update bet" if mine else "Place bet",
