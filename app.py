@@ -268,6 +268,7 @@ with tab_objs[0]:
                     pick_key = f"pickval-{skey}"
                     st.session_state.setdefault(
                         pick_key, mine["pick"] if mine else options[0])
+                    st.markdown("👉 **Pick a side**")
                     pcols = st.columns(len(options), gap="medium")
                     for pci, o in enumerate(options):
                         sel = st.session_state[pick_key] == o
@@ -280,6 +281,7 @@ with tab_objs[0]:
                     amt_key = f"amt-{skey}"
                     st.session_state.setdefault(
                         amt_key, int(float(mine["amount"])) if mine else 100)
+                    st.markdown("💰 **Bet amount (₹)**")
                     chips = st.columns(4)
                     for ci, v in enumerate([100, 250, 500, 1000]):
                         if v <= MAX_BET and chips[ci].button(
