@@ -49,6 +49,51 @@ def label(g, o):
             "over": "Over 2.5", "under": "Under 2.5"}[o]
 
 
+TEAM_ISO = {
+    "qatar": "QA", "switzerland": "CH", "canada": "CA", "usa": "US",
+    "united states": "US", "paraguay": "PY", "brazil": "BR", "morocco": "MA",
+    "south korea": "KR", "korea republic": "KR", "czech republic": "CZ",
+    "czechia": "CZ", "bosnia-herzegovina": "BA", "bosnia and herzegovina": "BA",
+    "argentina": "AR", "france": "FR", "england": "GB", "spain": "ES",
+    "portugal": "PT", "germany": "DE", "netherlands": "NL", "belgium": "BE",
+    "croatia": "HR", "italy": "IT", "uruguay": "UY", "colombia": "CO",
+    "mexico": "MX", "japan": "JP", "senegal": "SN", "ghana": "GH",
+    "nigeria": "NG", "cameroon": "CM", "egypt": "EG", "tunisia": "TN",
+    "algeria": "DZ", "ivory coast": "CI", "denmark": "DK", "sweden": "SE",
+    "poland": "PL", "serbia": "RS", "wales": "GB", "scotland": "GB",
+    "ecuador": "EC", "peru": "PE", "chile": "CL", "australia": "AU",
+    "iran": "IR", "saudi arabia": "SA", "qatar": "QA", "costa rica": "CR",
+    "panama": "PA", "jamaica": "JM", "honduras": "HN", "new zealand": "NZ",
+    "norway": "NO", "austria": "AT", "turkey": "TR", "ukraine": "UA",
+    "greece": "GR", "russia": "RU", "south africa": "ZA", "cape verde": "CV",
+    "curacao": "CW", "haiti": "HT", "jordan": "JO", "uzbekistan": "UZ",
+}
+
+
+def flag(team):
+    iso = TEAM_ISO.get((team or "").strip().lower())
+    if not iso:
+        return ""
+    return "".join(chr(0x1F1E6 + ord(c) - ord("A")) for c in iso.upper())
+
+
+def bet_label(g, o):
+    if o == "home":
+        return f"{flag(g['home'])} {g['home']}".strip()
+    if o == "away":
+        return f"{flag(g['away'])} {g['away']}".strip()
+    return {"draw": "🤝 Draw", "over": "Over 2.5", "under": "Under 2.5"}[o]
+
+
+def closes_in_text(kickoff_dt):
+    secs = int(((kickoff_dt - timedelta(minutes=CLOSE_MIN)) - now_utc()).total_seconds())
+    if secs <= 0:
+        return None
+    h, m = secs // 3600, (secs % 3600) // 60
+    return f"{h}h {m}m" if h else f"{m}m"
+
+
+
 
 def project_payouts(bets, market, options):
     """Per-person upside once the pool is locked. Each person bet one side;
@@ -185,7 +230,7 @@ st.title("⚽ World Cup Betting Pool")
 st.caption(f"Betting as **{who['name']}** · bets close {CLOSE_MIN} min before kickoff · "
            f"max ₹{MAX_BET} per bet · payouts are pari-mutuel (pool-based)")
 
-tabs = ["Tonight's games", "My bets"]
+tabs = ["Tonight's games", "My bets", "🏆 Leaderboard"]
 if st.session_state.admin:
     tabs.append("🔧 Admin")
 tab_objs = st.tabs(tabs)
@@ -200,56 +245,63 @@ with tab_objs[0]:
         st.info("No upcoming games in the next day or so. Check back later!")
     for g in games:
         is_open = betting_open(kick(g), close_buffer_min=CLOSE_MIN)
-        ref = g.get("ref_odds") or {}
         bets = db.bets_for_game(g["id"])
         with st.container(border=True):
-            st.subheader(f"{g['home']} vs {g['away']}")
-            st.caption(f"Kickoff {ist(kick(g))} · "
-                       + ("🟢 betting open" if is_open else "🔒 betting closed"))
+            st.subheader(f"{flag(g['home'])} {g['home']}  vs  {flag(g['away'])} {g['away']}")
+            cd = closes_in_text(kick(g))
+            if is_open and cd:
+                st.markdown(f"### ⏰ Closes in {cd}")
+                st.caption(f"Kickoff {ist(kick(g))}")
+            else:
+                st.caption(f"🔒 Betting closed · kickoff {ist(kick(g))}")
 
             for market, options in (("result", ["home", "draw", "away"]),
                                     ("ou25", ["over", "under"])):
                 st.markdown("**🏆 Bet 1 · Match result** — who wins?"
                             if market == "result"
                             else "**⚽ Bet 2 · Total goals** — over or under 2.5?")
-                pools, total = pool_summary(bets, market, options)
-                cols = st.columns(len(options))
-                for c, o in zip(cols, options):
-                    side, pct = pools[o]
-                    if is_open:
-                        c.metric(label(g, o), "—", "pool hidden until close", delta_color="off")
-                    else:
-                        c.metric(label(g, o),
-                                 f"pool ₹{side:.0f} · {pct:.0f}%", "final", delta_color="off")
-
+                rows = [b for b in bets if b["market"] == market]
 
                 if is_open:
-                    mine = next((b for b in bets if b["splitwise_user_id"] == who["id"]
-                                 and b["market"] == market), None)
-                    with st.form(f"bet-{g['id']}-{market}", border=False):
-                        c1, c2, c3 = st.columns([2, 1, 1])
-                        pick = c1.selectbox("Pick", options,
-                                            format_func=lambda o, g=g: label(g, o),
-                                            index=options.index(mine["pick"]) if mine else 0,
-                                            key=f"p-{g['id']}-{market}")
-                        amt = c2.number_input("₹", min_value=50, max_value=MAX_BET,
-                                              value=int(float(mine["amount"])) if mine else 100,
-                                              key=f"a-{g['id']}-{market}")
-                        placed = c3.form_submit_button(
-                            "Update bet" if mine else "Place bet", use_container_width=True)
-                        if placed:
-                            # re-check window server-side at write time (stale-tab guard)
-                            if not betting_open(kick(g), close_buffer_min=CLOSE_MIN):
-                                st.error("Betting just closed for this game.")
-                            else:
-                                db.upsert_bet(g["id"], who["id"], who["name"],
-                                              market, pick, int(amt))
-                                st.success(f"Bet saved: ₹{int(amt)} on {label(g, pick)}")
-                                st.rerun()
-                    if mine:
-                        st.caption(f"Your current bet: ₹{float(mine['amount']):.0f} on "
-                                   f"{label(g, mine['pick'])} — submit again to change it, "
-                                   f"any time before close.")
+                    mine = next((b for b in rows if b["splitwise_user_id"] == who["id"]), None)
+                    skey = f"{g['id']}-{market}"
+                    pick = st.radio("Your pick", options,
+                                    format_func=lambda o, g=g: bet_label(g, o),
+                                    index=options.index(mine["pick"]) if mine else 0,
+                                    horizontal=True, key=f"pick-{skey}",
+                                    label_visibility="collapsed")
+                    amt_key = f"amt-{skey}"
+                    st.session_state.setdefault(
+                        amt_key, int(float(mine["amount"])) if mine else 100)
+                    chips = st.columns(4)
+                    for ci, v in enumerate([100, 250, 500, 1000]):
+                        if v <= MAX_BET and chips[ci].button(
+                                f"₹{v}", key=f"chip-{skey}-{v}", use_container_width=True):
+                            st.session_state[amt_key] = v
+                            st.rerun()
+                    amt = st.number_input("Amount ₹", min_value=50, max_value=MAX_BET,
+                                          step=50, key=amt_key, label_visibility="collapsed")
+                    if st.button("Update bet" if mine else "Place bet",
+                                 key=f"place-{skey}", type="primary",
+                                 use_container_width=True):
+                        if not betting_open(kick(g), close_buffer_min=CLOSE_MIN):
+                            st.error("Betting just closed for this game.")
+                        else:
+                            db.upsert_bet(g["id"], who["id"], who["name"],
+                                          market, pick, int(amt))
+                            st.success(f"Bet saved: ₹{int(amt)} on {label(g, pick)}")
+                            st.rerun()
+                    n = len(rows)
+                    extra = " · ✅ your bet is in" if mine else ""
+                    st.caption(f"🔒 Pool unlocks at kickoff · "
+                               f"🔥 {n} bet{'s' if n != 1 else ''} placed{extra}")
+                else:
+                    pools, total = pool_summary(bets, market, options)
+                    cols = st.columns(len(options))
+                    for c, o in zip(cols, options):
+                        side, pct = pools[o]
+                        c.metric(label(g, o), f"pool ₹{side:.0f}",
+                                 f"{pct:.0f}%", delta_color="off")
                 st.divider()
 
 
@@ -276,6 +328,31 @@ with tab_objs[1]:
         if you is not None:
             st.write(f"• {s['night_label']}: you "
                      f"{'won ₹' + str(you) if you >= 0 else 'lost ₹' + str(-you)}")
+
+
+# ---------------- tab: leaderboard ----------------
+
+with tab_objs[2]:
+    st.markdown("### 🏆 Tournament standings")
+    settlements = db.list_settlements()
+    if not settlements:
+        st.info("No settled games yet — standings appear after the first payout.")
+    else:
+        totals, played = {}, {}
+        for s in settlements:
+            for name, net in (s["nets"] or {}).items():
+                totals[name] = totals.get(name, 0) + int(net)
+                played[name] = played.get(name, 0) + 1
+        ranked = sorted(totals.items(), key=lambda kv: (-kv[1], kv[0]))
+        medals = {0: "🥇", 1: "🥈", 2: "🥉"}
+        for idx, (name, net) in enumerate(ranked):
+            tag = medals.get(idx, f"{idx+1}.")
+            mark = "  ← you" if name == who["name"] else ""
+            sign = "+" if net >= 0 else "−"
+            dot = "🟢" if net >= 0 else "🔴"
+            st.write(f"{tag}  **{name}**{mark} — {dot} {sign}₹{abs(net)} "
+                     f"`({played[name]} night{'s' if played[name] != 1 else ''})`")
+        st.caption(f"{len(settlements)} night(s) settled so far.")
 
 
 # ---------------- tab: admin ----------------
