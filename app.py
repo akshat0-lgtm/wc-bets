@@ -243,75 +243,83 @@ with tab_objs[0]:
              if now_utc() < kick(g) < now_utc() + timedelta(hours=WINDOW_HOURS)]
     if not games:
         st.info("No upcoming games in the next day or so. Check back later!")
+    st.session_state.setdefault("open_game", None)
     for g in games:
         is_open = betting_open(kick(g), close_buffer_min=CLOSE_MIN)
         bets = db.bets_for_game(g["id"])
+        cd = closes_in_text(kick(g))
+        opened = st.session_state.open_game == g["id"]
         with st.container(border=True):
-            st.subheader(f"{flag(g['home'])} {g['home']}  vs  {flag(g['away'])} {g['away']}")
-            cd = closes_in_text(kick(g))
-            if is_open and cd:
-                st.markdown(f"### ⏰ Closes in {cd}")
-                st.caption(f"Kickoff {ist(kick(g))}")
-            else:
-                st.caption(f"🔒 Betting closed · kickoff {ist(kick(g))}")
-
-            for market, options in (("result", ["home", "draw", "away"]),
-                                    ("ou25", ["over", "under"])):
-                st.markdown("**🏆 Bet 1 · Match result** — who wins?"
-                            if market == "result"
-                            else "**⚽ Bet 2 · Total goals** — over or under 2.5?")
-                rows = [b for b in bets if b["market"] == market]
-
-                if is_open:
-                    mine = next((b for b in rows if b["splitwise_user_id"] == who["id"]), None)
-                    skey = f"{g['id']}-{market}"
-                    pick_key = f"pickval-{skey}"
-                    st.session_state.setdefault(
-                        pick_key, mine["pick"] if mine else options[0])
-                    st.markdown("👉 **Pick a side**")
-                    pcols = st.columns(len(options), gap="medium")
-                    for pci, o in enumerate(options):
-                        sel = st.session_state[pick_key] == o
-                        if pcols[pci].button(bet_label(g, o), key=f"pickbtn-{skey}-{o}",
-                                             use_container_width=True,
-                                             type="primary" if sel else "secondary"):
-                            st.session_state[pick_key] = o
-                            st.rerun()
-                    pick = st.session_state[pick_key]
-                    amt_key = f"amt-{skey}"
-                    st.session_state.setdefault(
-                        amt_key, int(float(mine["amount"])) if mine else 100)
-                    st.markdown("💰 **Bet amount (₹)**")
-                    chips = st.columns(4)
-                    for ci, v in enumerate([100, 250, 500, 1000]):
-                        if v <= MAX_BET and chips[ci].button(
-                                f"₹{v}", key=f"chip-{skey}-{v}", use_container_width=True):
-                            st.session_state[amt_key] = v
-                            st.rerun()
-                    amt = st.number_input("Amount ₹", min_value=50, max_value=MAX_BET,
-                                          step=50, key=amt_key, label_visibility="collapsed")
-                    if st.button("Update bet" if mine else "Place bet",
-                                 key=f"place-{skey}", type="primary",
-                                 use_container_width=True):
-                        if not betting_open(kick(g), close_buffer_min=CLOSE_MIN):
-                            st.error("Betting just closed for this game.")
-                        else:
-                            db.upsert_bet(g["id"], who["id"], who["name"],
-                                          market, pick, int(amt))
-                            st.success(f"Bet saved: ₹{int(amt)} on {label(g, pick)}")
-                            st.rerun()
-                    n = len(rows)
-                    extra = " · ✅ your bet is in" if mine else ""
-                    st.caption(f"🔒 Pool unlocks at kickoff · "
-                               f"🔥 {n} bet{'s' if n != 1 else ''} placed{extra}")
+            head, btn = st.columns([4, 1])
+            with head:
+                st.markdown(f"**{flag(g['home'])} {g['home']}  vs  {flag(g['away'])} {g['away']}**")
+                if is_open and cd:
+                    st.caption(f"⏰ Closes in {cd} · kickoff {ist(kick(g))}")
                 else:
-                    pools, total = pool_summary(bets, market, options)
-                    cols = st.columns(len(options))
-                    for c, o in zip(cols, options):
-                        side, pct = pools[o]
-                        c.metric(label(g, o), f"pool ₹{side:.0f}",
-                                 f"{pct:.0f}%", delta_color="off")
-                st.divider()
+                    st.caption(f"🔒 Betting closed · kickoff {ist(kick(g))}")
+            if btn.button("Close ▾" if opened else "Bet ▸",
+                          key=f"toggle-{g['id']}", use_container_width=True):
+                st.session_state.open_game = None if opened else g["id"]
+                st.rerun()
+
+            if opened:
+                for market, options in (("result", ["home", "draw", "away"]),
+                                        ("ou25", ["over", "under"])):
+                    st.markdown("**🏆 Bet 1 · Match result** — who wins?"
+                                if market == "result"
+                                else "**⚽ Bet 2 · Total goals** — over or under 2.5?")
+                    rows = [b for b in bets if b["market"] == market]
+
+                    if is_open:
+                        mine = next((b for b in rows if b["splitwise_user_id"] == who["id"]), None)
+                        skey = f"{g['id']}-{market}"
+                        pick_key = f"pickval-{skey}"
+                        st.session_state.setdefault(
+                            pick_key, mine["pick"] if mine else options[0])
+                        st.markdown("👉 **Pick a side**")
+                        pcols = st.columns(len(options), gap="medium")
+                        for pci, o in enumerate(options):
+                            sel = st.session_state[pick_key] == o
+                            if pcols[pci].button(bet_label(g, o), key=f"pickbtn-{skey}-{o}",
+                                                 use_container_width=True,
+                                                 type="primary" if sel else "secondary"):
+                                st.session_state[pick_key] = o
+                                st.rerun()
+                        pick = st.session_state[pick_key]
+                        amt_key = f"amt-{skey}"
+                        st.session_state.setdefault(
+                            amt_key, int(float(mine["amount"])) if mine else 100)
+                        st.markdown("💰 **Bet amount (₹)**")
+                        chips = st.columns(4)
+                        for ci, v in enumerate([100, 250, 500, 1000]):
+                            if v <= MAX_BET and chips[ci].button(
+                                    f"₹{v}", key=f"chip-{skey}-{v}", use_container_width=True):
+                                st.session_state[amt_key] = v
+                                st.rerun()
+                        amt = st.number_input("Amount ₹", min_value=50, max_value=MAX_BET,
+                                              step=50, key=amt_key, label_visibility="collapsed")
+                        if st.button("Update bet" if mine else "Place bet",
+                                     key=f"place-{skey}", type="primary",
+                                     use_container_width=True):
+                            if not betting_open(kick(g), close_buffer_min=CLOSE_MIN):
+                                st.error("Betting just closed for this game.")
+                            else:
+                                db.upsert_bet(g["id"], who["id"], who["name"],
+                                              market, pick, int(amt))
+                                st.success(f"Bet saved: ₹{int(amt)} on {label(g, pick)}")
+                                st.rerun()
+                        n = len(rows)
+                        extra = " · ✅ your bet is in" if mine else ""
+                        st.caption(f"🔒 Pool unlocks at kickoff · "
+                                   f"🔥 {n} bet{'s' if n != 1 else ''} placed{extra}")
+                    else:
+                        pools, total = pool_summary(bets, market, options)
+                        cols = st.columns(len(options))
+                        for c, o in zip(cols, options):
+                            side, pct = pools[o]
+                            c.metric(label(g, o), f"pool ₹{side:.0f}",
+                                     f"{pct:.0f}%", delta_color="off")
+                    st.divider()
 
 
 # ---------------- tab: my bets ----------------
