@@ -12,7 +12,9 @@ def client():
 
 def upsert_game(game: dict):
     client().table("games").upsert(game).execute()
+    _clear_read_cache()
 
+@st.cache_data(ttl=5)
 def list_games(statuses=None):
     q = client().table("games").select("*").order("kickoff_utc")
     if statuses:
@@ -27,12 +29,15 @@ def set_result(game_id: str, home_score: int, away_score: int):
     client().table("games").update(
         {"home_score": home_score, "away_score": away_score, "status": "result_in"}
     ).eq("id", game_id).execute()
+    _clear_read_cache()
 
 def set_status(game_id: str, status: str):
     client().table("games").update({"status": status}).eq("id", game_id).execute()
+    _clear_read_cache()
 
 def set_ref_odds(game_id: str, ref_odds: dict):
     client().table("games").update({"ref_odds": ref_odds}).eq("id", game_id).execute()
+    _clear_read_cache()
 
 
 # ---------- bets ----------
@@ -43,14 +48,17 @@ def upsert_bet(game_id, sw_user_id, user_name, market, pick, amount):
          "market": market, "pick": pick, "amount": amount},
         on_conflict="game_id,splitwise_user_id,market",
     ).execute()
+    _clear_read_cache()
 
 def delete_bet(game_id, sw_user_id, market):
     client().table("bets").delete().eq("game_id", game_id)\
         .eq("splitwise_user_id", sw_user_id).eq("market", market).execute()
+    _clear_read_cache()
 
 def bets_for_game(game_id: str):
     return client().table("bets").select("*").eq("game_id", game_id).execute().data
 
+@st.cache_data(ttl=5)
 def bets_for_user(sw_user_id: int):
     return client().table("bets").select("*").eq("splitwise_user_id", sw_user_id).execute().data
 
@@ -62,7 +70,9 @@ def record_settlement(night_label, game_ids, nets, expense_id):
         {"night_label": night_label, "game_ids": game_ids,
          "nets": nets, "splitwise_expense_id": str(expense_id)}
     ).execute()
+    _clear_read_cache()
 
+@st.cache_data(ttl=5)
 def list_settlements():
     return client().table("settlements").select("*").order("created_at", desc=True).execute().data
 
@@ -87,7 +97,15 @@ def list_auth():
 def delete_auth(sw_user_id):
     client().table("user_auth").delete().eq("splitwise_user_id", sw_user_id).execute()
 
+@st.cache_data(ttl=5)
 def bets_for_games(game_ids: list):
     if not game_ids:
         return []
     return client().table("bets").select("*").in_("game_id", game_ids).execute().data
+
+def _clear_read_cache():
+    """Call after any write so the next read reflects it immediately."""
+    list_games.clear()
+    bets_for_user.clear()
+    list_settlements.clear()
+    bets_for_games.clear()
