@@ -244,9 +244,10 @@ with tab_objs[0]:
     if not games:
         st.info("No upcoming games in the next day or so. Check back later!")
     st.session_state.setdefault("open_game", None)
+    all_bets = db.bets_for_games([g["id"] for g in games])
     for g in games:
         is_open = betting_open(kick(g), close_buffer_min=CLOSE_MIN)
-        bets = db.bets_for_game(g["id"])
+        bets = [b for b in all_bets if b["game_id"] == g["id"]]
         cd = closes_in_text(kick(g))
         opened = st.session_state.open_game == g["id"]
         with st.container(border=True):

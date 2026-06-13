@@ -86,3 +86,8 @@ def list_auth():
 
 def delete_auth(sw_user_id):
     client().table("user_auth").delete().eq("splitwise_user_id", sw_user_id).execute()
+
+def bets_for_games(game_ids: list):
+    if not game_ids:
+        return []
+    return client().table("bets").select("*").in_("game_id", game_ids).execute().data
