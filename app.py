@@ -67,8 +67,8 @@ def project_payouts(bets, market, options):
     return out, pool
 
 
-def projection_text(g, rows, pool):
-    lines = [f"🔒 Pool locked — {g['home']} vs {g['away']}",
+def projection_text(g, rows, pool, market_name="Result"):
+    lines = [f"🔒 {market_name} — {g['home']} vs {g['away']}",
              f"Total pool: ₹{pool:.0f}", "",
              "If your pick wins:"]
     for r in sorted(rows, key=lambda r: -r["win_payout"]):
@@ -207,9 +207,11 @@ with tab_objs[0]:
             st.caption(f"Kickoff {ist(kick(g))} · "
                        + ("🟢 betting open" if is_open else "🔒 betting closed"))
 
-            for market, options in (("result", ["home", "draw", "away"]),):
-                st.markdown("**Match result**" if market == "result"
-                            else "**Total goals (line: 2.5)**")
+            for market, options in (("result", ["home", "draw", "away"]),
+                                    ("ou25", ["over", "under"])):
+                st.markdown("**🏆 Bet 1 · Match result** — who wins?"
+                            if market == "result"
+                            else "**⚽ Bet 2 · Total goals** — over or under 2.5?")
                 pools, total = pool_summary(bets, market, options)
                 cols = st.columns(len(options))
                 for c, o in zip(cols, options):
@@ -333,12 +335,19 @@ if st.session_state.admin:
             if betting_open(kick(g), close_buffer_min=CLOSE_MIN):
                 continue  # betting still open
             bets = db.bets_for_game(g["id"])
-            rows, pool = project_payouts(bets, "result", ["home", "draw", "away"])
-            if not rows:
+            markets_def = [("Match result", "result", ["home", "draw", "away"]),
+                           ("Total goals O/U 2.5", "ou25", ["over", "under"])]
+            parts, total_pool = [], 0.0
+            for mname, mkey, mopts in markets_def:
+                rows, pool = project_payouts(bets, mkey, mopts)
+                if rows:
+                    parts.append(projection_text(g, rows, pool, mname))
+                    total_pool += pool
+            if not parts:
                 continue
             any_locked = True
-            with st.expander(f"{g['home']} vs {g['away']} — pool ₹{pool:.0f}"):
-                txt = projection_text(g, rows, pool)
+            with st.expander(f"{g['home']} vs {g['away']} — pool ₹{total_pool:.0f}"):
+                txt = "\n\n".join(parts)
                 st.code(txt, language=None)
                 if st.button("📧 Email these projections", key=f"proj-{g['id']}"):
                     ok, info = send_email(
