@@ -265,11 +265,18 @@ with tab_objs[0]:
                 if is_open:
                     mine = next((b for b in rows if b["splitwise_user_id"] == who["id"]), None)
                     skey = f"{g['id']}-{market}"
-                    pick = st.radio("Your pick", options,
-                                    format_func=lambda o, g=g: bet_label(g, o),
-                                    index=options.index(mine["pick"]) if mine else 0,
-                                    horizontal=True, key=f"pick-{skey}",
-                                    label_visibility="collapsed")
+                    pick_key = f"pickval-{skey}"
+                    st.session_state.setdefault(
+                        pick_key, mine["pick"] if mine else options[0])
+                    pcols = st.columns(len(options), gap="medium")
+                    for pci, o in enumerate(options):
+                        sel = st.session_state[pick_key] == o
+                        if pcols[pci].button(bet_label(g, o), key=f"pickbtn-{skey}-{o}",
+                                             use_container_width=True,
+                                             type="primary" if sel else "secondary"):
+                            st.session_state[pick_key] = o
+                            st.rerun()
+                    pick = st.session_state[pick_key]
                     amt_key = f"amt-{skey}"
                     st.session_state.setdefault(
                         amt_key, int(float(mine["amount"])) if mine else 100)
