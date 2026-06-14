@@ -285,15 +285,13 @@ with tab_objs[0]:
                         pcols = st.columns(len(options), gap="medium")
                         for pci, o in enumerate(options):
                             sel = st.session_state[pick_key] == o
-                            if pcols[pci].button(bet_label(g, o), key=f"pickbtn-{skey}-{o}",
+                            cnt = sum(1 for b in rows if b["pick"] == o)
+                            lbl = f"{bet_label(g, o)}  ·  👤 {cnt}"
+                            if pcols[pci].button(lbl, key=f"pickbtn-{skey}-{o}",
                                                  use_container_width=True,
                                                  type="primary" if sel else "secondary"):
                                 st.session_state[pick_key] = o
                                 st.rerun()
-                        ccols = st.columns(len(options), gap="medium")
-                        for cci, o in enumerate(options):
-                            cnt = sum(1 for b in rows if b["pick"] == o)
-                            ccols[cci].caption(f"👤 {cnt}")
                         pick = st.session_state[pick_key]
                         amt_key = f"amt-{skey}"
                         st.session_state.setdefault(
