@@ -5,7 +5,7 @@ Admin flow (separate code): manage games, odds, results, settle night -> Splitwi
 import smtplib
 import hashlib, hmac, os, binascii
 from email.mime.text import MIMEText
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone, timedelta, time
 from zoneinfo import ZoneInfo
 
 import streamlit as st
@@ -387,21 +387,30 @@ if st.session_state.admin:
         st.markdown("### Games")
 
         with st.expander("Fetch fixtures from TheSportsDB"):
-            d = st.date_input("Date (UTC)", value=now_utc().date())
-            if st.button("Fetch World Cup games for this date"):
+            c1, c2 = st.columns(2)
+            rnd = c1.number_input("Matchday / round", min_value=1, max_value=20, value=1)
+            d = c2.date_input("Show only this IST day",
+                              value=now_utc().astimezone(IST).date())
+            st.caption("Pulls the whole round (beats the free-tier per-day cap), "
+                       "then keeps games on the IST day you picked.")
+            if st.button("Fetch round → add games for this IST day"):
                 try:
-                    found = fixtures.fetch_day(d.isoformat())
+                    allgames = fixtures.fetch_round(int(rnd))
                 except Exception as e:
                     st.error(f"Fetch failed: {e}")
-                    found = []
+                    allgames = []
+                # keep games whose kickoff falls on the chosen IST calendar day
+                found = [f for f in allgames if f["kickoff_utc"] and
+                         datetime.fromisoformat(f["kickoff_utc"]).astimezone(IST).date() == d]
                 if not found:
-                    st.warning("No World Cup games returned — check TSDB_WC_LEAGUE_ID "
-                               "in secrets, or add the game manually below.")
+                    st.warning(f"No round-{int(rnd)} games on {d} (IST). Try another "
+                               "round/day, or add manually below.")
                 for f in found:
                     f["status"] = "upcoming"
                     f.pop("home_score", None); f.pop("away_score", None)
                     db.upsert_game(f)
-                    st.success(f"Added: {f['home']} vs {f['away']} ({f['kickoff_utc']})")
+                    st.success(f"Added: {f['home']} vs {f['away']} "
+                               f"({ist(datetime.fromisoformat(f['kickoff_utc']))})")
 
         with st.expander("Add a game manually"):
             with st.form("manual-game"):
