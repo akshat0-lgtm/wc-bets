@@ -254,10 +254,14 @@ with tab_objs[0]:
             head, btn = st.columns([4, 1])
             with head:
                 st.markdown(f"**{flag(g['home'])} {g['home']}  vs  {flag(g['away'])} {g['away']}**")
+                game_pool = sum(float(b["amount"]) for b in bets)
+                n_people = len({b["splitwise_user_id"] for b in bets})
+                stake_line = (f" · 💰 ₹{game_pool:.0f} pool · "
+                              f"👥 {n_people} in") if bets else ""
                 if is_open and cd:
-                    st.caption(f"⏰ Closes in {cd} · kickoff {ist(kick(g))}")
+                    st.caption(f"⏰ Closes in {cd}{stake_line}")
                 else:
-                    st.caption(f"🔒 Betting closed · kickoff {ist(kick(g))}")
+                    st.caption(f"🔒 Betting closed{stake_line}")
             if btn.button("Close ▾" if opened else "Bet ▸",
                           key=f"toggle-{g['id']}", use_container_width=True):
                 st.session_state.open_game = None if opened else g["id"]
@@ -286,6 +290,10 @@ with tab_objs[0]:
                                                  type="primary" if sel else "secondary"):
                                 st.session_state[pick_key] = o
                                 st.rerun()
+                        ccols = st.columns(len(options), gap="medium")
+                        for cci, o in enumerate(options):
+                            cnt = sum(1 for b in rows if b["pick"] == o)
+                            ccols[cci].caption(f"👤 {cnt}")
                         pick = st.session_state[pick_key]
                         amt_key = f"amt-{skey}"
                         st.session_state.setdefault(
@@ -318,8 +326,9 @@ with tab_objs[0]:
                         cols = st.columns(len(options))
                         for c, o in zip(cols, options):
                             side, pct = pools[o]
+                            cnt = sum(1 for b in rows if b["pick"] == o)
                             c.metric(label(g, o), f"pool ₹{side:.0f}",
-                                     f"{pct:.0f}%", delta_color="off")
+                                     f"{pct:.0f}% · {cnt} 👤", delta_color="off")
                     st.divider()
 
 
