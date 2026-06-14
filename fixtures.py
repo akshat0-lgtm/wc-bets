@@ -22,6 +22,16 @@ def fetch_day(date_str: str):
     return [_to_game(e) for e in (r.json().get("events") or [])]
 
 
+def fetch_round(round_no: int, season: str = "2026"):
+    """All games in a round (e.g. group-stage matchday 1) — beats the
+    eventsday ~3-per-day free-tier cap. Returns list of game dicts."""
+    r = requests.get(f"{BASE}/eventsround.php",
+                     params={"id": _wc_league_id(), "r": round_no, "s": season},
+                     timeout=20)
+    r.raise_for_status()
+    return [_to_game(e) for e in (r.json().get("events") or [])]
+
+
 def fetch_result(event_id: str):
     """Refresh one event; returns (home_score, away_score, status) or (None, None, status)."""
     r = requests.get(f"{BASE}/lookupevent.php", params={"id": event_id}, timeout=15)
